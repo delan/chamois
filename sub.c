@@ -19,37 +19,88 @@ x=(cz-by)/(a-ab)
 */
 
 #include <stdio.h>
-int main(void) {
-	FILE *dF = fopen("dirty.txt", "r");
-	FILE *wF = fopen("watermark.txt", "r");
-	int x, y, temp1, temp2;
-	double dR, dG, dB, dA; /* dirty */
-	double wR, wG, wB, wA; /* watermark */
-	double cR, cG, cB, cA; /* clean */
-	while (1) {
-		temp1 = fscanf(dF, "%d,%d:(%lf,%lf,%lf,%lf)",
-			&x, &y, &dR, &dG, &dB, &dA);
-		temp2 = fscanf(wF, "%d,%d:(%lf,%lf,%lf,%lf)",
-			&x, &y, &wR, &wG, &wB, &wA);
-		if (temp1 < 6 || temp2 < 6)
-			break;
-		dA /= 256.0;
-		wA /= 256.0;
-		/*
-			let
-			a = cA
-			b = wA
-			c = dA
-			x = c[RGB]
-			y = w[RGB]
-			z = d[RGB]
-		*/
-		cA = (dA - wA) / (1 - wA);
-		cR = (dA * dR - wA * wR) / (cA - cA * wA);
-		cG = (dA * dG - wA * wG) / (cA - cA * wA);
-		cB = (dA * dB - wA * wB) / (cA - cA * wA);
-		printf("%d,%d:(%d,%d,%d,%d)\n", x, y, (int) cR,
-			(int) cG, (int) cB, (int) (cA * 256.0));
+#include <wand/MagickWand.h>
+
+int ThrowWandException(MagickWand *w) {
+	ExceptionType s;
+	char *d = MagickGetException(w, &s);
+	fprintf(stderr, "error %d: %s\n", s, d);
+	MagickRelinquishMemory(d);
+	return 1;
+}
+
+int main(int argc, char **argv) {
+	int retval = 0;
+	size_t x, y;
+	size_t dW, dH, wW, wH; /* dimensions: dirty, watermark */
+	double dR, dG, dB, dA; /* pixel components of dirty */
+	double wR, wG, wB, wA; /* pixel components of watermark */
+	double cR, cG, cB, cA; /* pixel components of clean */
+	MagickWand *dM, *wM, *cM; /* wands: dirty, watermark, clean */
+	PixelIterator *dI, *wI, *cI; /* iterators: dirty, watermark, clean */
+	PixelWand **dP, **wP, **cP; /* row arrays: dirty, watermark, clean */
+	if (argc < 4) {
+		fputs("usage: sub <dirty> <watermark> <clean>\n", stderr);
+		return 1;
 	}
-	return 0;
+	MagickWandGenesis();
+	dM = NewMagickWand();
+	wM = NewMagickWand();
+	cM = NewMagickWand();
+	if (MagickReadImage(dM, argv[1]) == MagickFalse) {
+		retval = ThrowWandException(dM);
+		goto cleanup;
+	}
+	if (MagickReadImage(wM, argv[2]) == MagickFalse) {
+		retval = ThrowWandException(dM);
+		goto cleanup;
+	}
+	dW = MagickGetImageWidth(dM);
+	dH = MagickGetImageHeight(dM);
+	wW = MagickGetImageWidth(wM);
+	wH = MagickGetImageHeight(wM);
+	if (dW != wW || dH != wH) {
+		fputs("error: different image dimensions\n", stderr);
+		retval = 1;
+		goto cleanup;
+	}
+	MagickSetSize(cM, dW, dH);
+	MagickReadImage(cM, "xc:none");
+	dI = NewPixelIterator(dM);
+	wI = NewPixelIterator(wM);
+	cI = NewPixelIterator(cM);
+	for (y = 0; y < dH; y++) {
+		dP = PixelGetNextIteratorRow(dI, &x);
+		wP = PixelGetNextIteratorRow(wI, &x);
+		cP = PixelGetNextIteratorRow(cI, &x);
+		while (x--) {
+			dR = PixelGetRed(dP[x]);
+			dG = PixelGetGreen(dP[x]);
+			dB = PixelGetBlue(dP[x]);
+			dA = PixelGetAlpha(dP[x]);
+			wR = PixelGetRed(wP[x]);
+			wG = PixelGetGreen(wP[x]);
+			wB = PixelGetBlue(wP[x]);
+			wA = PixelGetAlpha(wP[x]);
+			cA = (dA - wA) / (1 - wA);
+			cR = (dA * dR - wA * wR) / (cA - cA * wA);
+			cG = (dA * dG - wA * wG) / (cA - cA * wA);
+			cB = (dA * dB - wA * wB) / (cA - cA * wA);
+			PixelSetRed(cP[x], cR);
+			PixelSetGreen(cP[x], cG);
+			PixelSetBlue(cP[x], cB);
+			PixelSetAlpha(cP[x], cA);
+		}
+		PixelSyncIterator(cI);
+	}
+	MagickWriteImage(cM, argv[3]);
+	cleanup:
+	DestroyMagickWand(dM);
+	DestroyMagickWand(wM);
+	DestroyMagickWand(cM);
+	DestroyPixelIterator(dI);
+	DestroyPixelIterator(wI);
+	DestroyPixelIterator(cI);
+	MagickWandTerminus();
+	return retval;
 }
