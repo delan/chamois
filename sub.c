@@ -1,31 +1,55 @@
 /*
-x, y, z = old, overlay, new
-a = alpha [0..1]
 
-z=(1-a)x+ay
+http://stackoverflow.com/q/10781953
 
-Now solve for x in terms of a, y, z:
+x, y, z = component (old, overlay, new)
+a, b, c = alpha [0..1] (old, overlay, new)
 
-(1-a)x=z-ay
-x=(z-ay)/(1-a)
+c=b+a(1-b)
+z=(by+ax(1-b))/c
+
+Now solve for (a, x) in terms of (b, c, y, z):
+
+a(1-b)=c-b
+a=(c-b)/(1-b)
+
+ax(1-b)=cz-by
+x=(cz-by)/(a-ab)
 
 */
 
 #include <stdio.h>
 int main(void) {
-	FILE *f = fopen("dirty.txt", "r");
-	FILE *F = fopen("watermark.txt", "r");
+	FILE *dF = fopen("dirty.txt", "r");
+	FILE *wF = fopen("watermark.txt", "r");
 	int x, y, temp1, temp2;
-	double r, g, b, R, G, B, A;
+	double dR, dG, dB, dA; /* dirty */
+	double wR, wG, wB, wA; /* watermark */
+	double cR, cG, cB, cA; /* clean */
 	while (1) {
-		temp1 = fscanf(f, "%d,%d:(%lf,%lf,%lf)", &x, &y, &r, &g, &b);
-		temp2 = fscanf(F, "%d,%d:(%lf,%lf,%lf,%lf)", &x, &y, &R, &G, &B, &A);
-		if (temp1 < 5 || temp2 < 6)
+		temp1 = fscanf(dF, "%d,%d:(%lf,%lf,%lf,%lf)",
+			&x, &y, &dR, &dG, &dB, &dA);
+		temp2 = fscanf(wF, "%d,%d:(%lf,%lf,%lf,%lf)",
+			&x, &y, &wR, &wG, &wB, &wA);
+		if (temp1 < 6 || temp2 < 6)
 			break;
-		r = (r - (A / 255.0) * R) / (1 - (A / 255.0));
-		g = (g - (A / 255.0) * G) / (1 - (A / 255.0));
-		b = (b - (A / 255.0) * B) / (1 - (A / 255.0));
-		printf("%d,%d:(%d,%d,%d,255)\n", x, y, (int) r, (int) g, (int) b);
+		dA /= 256.0;
+		wA /= 256.0;
+		/*
+			let
+			a = cA
+			b = wA
+			c = dA
+			x = c[RGB]
+			y = w[RGB]
+			z = d[RGB]
+		*/
+		cA = (dA - wA) / (1 - wA);
+		cR = (dA * dR - wA * wR) / (cA - cA * wA);
+		cG = (dA * dG - wA * wG) / (cA - cA * wA);
+		cB = (dA * dB - wA * wB) / (cA - cA * wA);
+		printf("%d,%d:(%d,%d,%d,%d)\n", x, y, (int) cR,
+			(int) cG, (int) cB, (int) (cA * 256.0));
 	}
 	return 0;
 }
