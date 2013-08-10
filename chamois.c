@@ -93,7 +93,10 @@ int main(int argc, char **argv) {
 		}
 		PixelSyncIterator(cI);
 	}
-	MagickWriteImage(cM, argv[3]);
+	if (MagickWriteImage(cM, argv[3]) == MagickFalse) {
+		retval = ThrowWandException(dM);
+		goto cleanup;
+	}
 	cleanup:
 	DestroyMagickWand(dM);
 	DestroyMagickWand(wM);
