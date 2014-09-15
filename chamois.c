@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
 		retval = ThrowWandException(dM);
 		goto cleanup;
 	}
-	cleanup:
+cleanup:
 	DestroyMagickWand(dM);
 	DestroyMagickWand(wM);
 	DestroyMagickWand(cM);
